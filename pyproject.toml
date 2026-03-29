@@ -1,0 +1,9 @@
+[project]
+name = "smm4h-heard-task2-insomnia"
+version = "0.1.0"
+description = "SMM4H-HeaRD @ ACL-2026 Shared Task 2: Detection of Insomnia in Clinical Notes"
+requires-python = ">=3.6"
+dependencies = [
+    "ipykernel>=5.5.6",
+    "pandas",
+]

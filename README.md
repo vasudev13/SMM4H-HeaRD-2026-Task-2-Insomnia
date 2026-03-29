@@ -1,5 +1,25 @@
 # SMM4H-HeaRD @ ACL-2026 Shared Task 2: Detection of Insomnia in Clinical Notes
 
+## Setup
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management. Install uv, then create a virtual environment and install dependencies:
+
+```bash
+# Install uv (macOS/Linux)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment and install dependencies
+uv venv
+source .venv/bin/activate
+uv sync
+```
+
+Alternatively, run scripts without activating the environment:
+
+```bash
+uv run python text_mimic_notes.py ...
+```
+
 ## Corpus
 
 This shared task utilizes a corpus of clinical notes derived from the MIMIC-III Database. The clinical notes have been augmented with additional structured patient information, specifically sex, age, and the medications prescribed during their hospital stay.
