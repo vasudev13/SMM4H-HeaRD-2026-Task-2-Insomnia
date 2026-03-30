@@ -82,7 +82,20 @@ def main() -> None:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         payload = {**result.to_dict(), "split_name": args.split_name}
         name = (args.experiment_name or "").strip()
-        out_obj: dict = {name: payload} if name else result.to_dict()
+        existing: dict = {}
+        if args.json_out.exists():
+            with args.json_out.open(encoding="utf-8") as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                existing = loaded
+
+        # Named experiment mode: keep a top-level map of experiment_name -> metrics.
+        # Flat mode (empty experiment name): merge keys into the root object.
+        out_obj: dict
+        if name:
+            out_obj = {**existing, name: payload}
+        else:
+            out_obj = {**existing, **payload}
         with args.json_out.open("w", encoding="utf-8") as f:
             json.dump(out_obj, f, indent=2)
         print(f"Wrote metrics JSON: {args.json_out}")
