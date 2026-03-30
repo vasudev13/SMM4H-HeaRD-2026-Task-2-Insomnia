@@ -1,9 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "smm4h-heard-task2-insomnia"
 version = "0.1.0"
 description = "SMM4H-HeaRD @ ACL-2026 Shared Task 2: Detection of Insomnia in Clinical Notes"
-requires-python = ">=3.6"
+requires-python = ">=3.10"
 dependencies = [
+    "baml-py>=0.220.0",
     "ipykernel>=5.5.6",
     "pandas",
+    "pydantic>=2",
+    "python-dotenv>=1.0.0",
 ]
+
+[project.scripts]
+insomnia-inference = "insomnia.inference:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["insomnia"]

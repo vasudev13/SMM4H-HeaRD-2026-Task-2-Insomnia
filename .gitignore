@@ -1,2 +1,41 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
 .venv/
+venv/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Testing, coverage, linters
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Secrets (keep `.env.example` tracked)
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Task data & large corpora (MIMIC, labels, CSVs)
 data/
+
+# Pipeline outputs (labeled JSONL, inference JSON)
+outputs/
+
+# Generated JSON / JSON Lines (submissions, scratch). Use `git add -f path` to track.
+*.json
+*.jsonl

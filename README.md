@@ -20,6 +20,74 @@ Alternatively, run scripts without activating the environment:
 uv run python text_mimic_notes.py ...
 ```
 
+The project targets **Python 3.10+** (see `pyproject.toml`).
+
+## Running this repository
+
+### 1. Install dependencies
+
+From the repository root:
+
+```bash
+uv sync
+```
+
+This installs the package (including the `insomnia` library), BAML, pandas, and other dependencies.
+
+### 2. API key (LLM inference)
+
+Inference uses **Google Gemini** via BAML (`CustomGemini` in `baml_src/clients.baml`). Create a `.env` file in the repo root (you can start from `.env.example`) and set:
+
+```bash
+GOOGLE_API_KEY=your_key_here
+```
+
+The inference CLI loads `.env` automatically before calling the model.
+
+### 3. Regenerate the BAML client (after editing `baml_src/*.baml`)
+
+Whenever you change BAML sources, regenerate the Python client:
+
+```bash
+uv run baml-cli generate
+```
+
+### 4. Build labeled training JSONL (optional)
+
+Joins `data/training/train_corpus.csv` with `subtask_1.json` / `subtask_2.json` and writes JSONL under `outputs/labeled/`:
+
+```bash
+uv run python scripts/build_labeled_datasets.py
+```
+
+### 5. Run inference (validation → submission-shaped JSON)
+
+Default input is `data/validation/validation_corpus.csv`; default output directory is `outputs/inference/` (`subtask_1.json`, `subtask_2.json`):
+
+```bash
+uv run insomnia-inference
+```
+
+Equivalent:
+
+```bash
+uv run python scripts/run_inference.py
+```
+
+Useful flags:
+
+```bash
+uv run insomnia-inference --input-csv path/to/notes.csv --out-dir path/to/out --max-rows 5
+```
+
+`--max-rows` limits how many notes are processed (handy for a quick smoke test).
+
+### 6. Tests
+
+```bash
+uv run python -m unittest tests.test_spans -v
+```
+
 ## Corpus
 
 This shared task utilizes a corpus of clinical notes derived from the MIMIC-III Database. The clinical notes have been augmented with additional structured patient information, specifically sex, age, and the medications prescribed during their hospital stay.
@@ -32,7 +100,7 @@ The `text_mimic_notes.py` Python script is designed to retrieve clinical notes a
 
 #### Requirements
 
-- Python 3.6 or higher
+- Python 3.10 or higher (project default)
 - pandas library
 - datetime module
 
