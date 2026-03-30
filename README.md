@@ -64,12 +64,52 @@ On a fresh clone (or first run):
 
 Re-run `baml-cli generate` whenever you change any file under `baml_src/`.
 
-### 4. Build labeled training JSONL (optional)
+### 4. Build labeled train/validation artifacts (optional)
 
-Joins `data/training/train_corpus.csv` with `subtask_1.json` / `subtask_2.json` and writes JSONL under `outputs/labeled/`:
+Builds labeled artifacts for `training` and `validation` (default) by joining each split corpus CSV with its `subtask_1.json` and `subtask_2.json`.
+
+Default run:
 
 ```bash
 uv run python scripts/build_labeled_datasets.py
+```
+
+This writes split-scoped outputs under `outputs/labeled/`:
+
+- `outputs/labeled/training/subtask1_labeled.jsonl`
+- `outputs/labeled/training/subtask2_labeled.jsonl`
+- `outputs/labeled/training/subtask2_labeled_text_only.jsonl`
+- `outputs/labeled/training/training_labeled.csv`
+- `outputs/labeled/validation/subtask1_labeled.jsonl`
+- `outputs/labeled/validation/subtask2_labeled.jsonl`
+- `outputs/labeled/validation/subtask2_labeled_text_only.jsonl`
+- `outputs/labeled/validation/validation_labeled.csv`
+
+CSV schema (one row per note):
+
+- `note_id`
+- `text`
+- `subtask1_label` (`yes`/`no`)
+- `def1_spans`
+- `def2_spans`
+- `ruleb_spans`
+- `rulec_spans`
+
+Each `*_spans` column is stored as a JSON array string (e.g. `["881 899"]`).
+
+Useful flags:
+
+```bash
+# Build one split only
+uv run python scripts/build_labeled_datasets.py --split training
+uv run python scripts/build_labeled_datasets.py --split validation
+
+# Override paths for a single split
+uv run python scripts/build_labeled_datasets.py \
+  --split training \
+  --corpus path/to/corpus.csv \
+  --subtask1 path/to/subtask_1.json \
+  --subtask2 path/to/subtask_2.json
 ```
 
 ### 5. Run inference (validation → submission-shaped JSON)
@@ -94,11 +134,67 @@ uv run insomnia-inference --input-csv path/to/notes.csv --out-dir path/to/out --
 
 `--max-rows` limits how many notes are processed (handy for a quick smoke test).
 
+**Gemini rate limits:** Inference issues two model calls per note (`ClassifyInsomnia` and `ExtractInsomniaEvidence`). On the **Google AI free tier**, `gemini-2.5-flash` is often capped at about **5 requests per minute**, which leads to HTTP **429** if calls are fired back-to-back. By default, the CLI waits **12 seconds** between the *start* of consecutive requests (~5/min). Override with `GEMINI_MIN_INTERVAL_SEC` in `.env`, or `--min-interval-sec SEC` / `--rpm N` (mutually exclusive alternatives, where `--rpm` sets an interval of `60/N` seconds). Use `--min-interval-sec 0` when your API quota is high enough that throttling is unnecessary.
+
 ### 6. Tests
 
 ```bash
-uv run python -m unittest tests.test_spans -v
+uv run python -m unittest tests.test_spans tests.test_evaluate -v
 ```
+
+### 7. Evaluate predictions (Task 2 metrics)
+
+This repository now includes a local evaluator for:
+
+- Subtask 1: F1 score (`yes` as positive class)
+- Subtask 2A: micro-average F1 over rule labels
+- Subtask 2B: macro-average ROUGE-L Precision/Recall/F1 over evidence text
+
+Run with defaults (gold from `data/training/`, predictions from `outputs/inference/`):
+
+```bash
+uv run insomnia-evaluate --split-name train
+```
+
+Equivalent:
+
+```bash
+uv run python scripts/evaluate_predictions.py --split-name train
+```
+
+Explicit paths example:
+
+```bash
+uv run insomnia-evaluate \
+  --gold-subtask1 data/training/subtask_1.json \
+  --gold-subtask2 data/training/subtask_2.json \
+  --pred-subtask1 outputs/inference/subtask_1.json \
+  --pred-subtask2 outputs/inference/subtask_2.json \
+  --split-name validation \
+  --json-out outputs/inference/metrics.json
+```
+
+With `--json-out`, metrics are written under `--experiment-name` (default `v0 - gemini-2.5-flash baseline`), with `split_name` included in that nested object. Use `--experiment-name ''` for the previous flat shape.
+
+Notes:
+
+- Official Task 2 scorer code is not currently bundled in this repository.
+- The local evaluator is intended for reproducible offline model iteration and should be treated as an approximation until organizers release an official scorer endpoint/script.
+- Subtask 2B local scoring averages ROUGE-L over `Definition 1`, `Definition 2`, `Rule B`, and `Rule C` entries where the gold label is `yes`.
+
+## Makefile shortcuts
+
+For convenience, you can use the repository `Makefile`:
+
+```bash
+make sync
+make baml-init
+make baml-generate
+make inference
+make test
+```
+
+Run `make` (or `make help`) to see all available targets.
 
 ## Corpus
 

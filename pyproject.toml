@@ -17,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 insomnia-inference = "insomnia.inference:main"
+insomnia-evaluate = "insomnia.evaluate_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["insomnia"]
