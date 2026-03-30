@@ -18,13 +18,22 @@ dist/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/
 
+# Logs & temp
+*.log
+logs/
+*.tmp
+.tmp/
+
 # Secrets (keep `.env.example` tracked)
 .env
+.env.local
 
 # OS
 .DS_Store
