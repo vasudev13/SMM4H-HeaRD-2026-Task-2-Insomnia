@@ -44,13 +44,25 @@ GOOGLE_API_KEY=your_key_here
 
 The inference CLI loads `.env` automatically before calling the model.
 
-### 3. Regenerate the BAML client (after editing `baml_src/*.baml`)
+### 3. BAML prompts and generated client
 
-Whenever you change BAML sources, regenerate the Python client:
+**`baml_src/insomnia.baml` is not committed** (private prompts; see `.gitignore`). The repo includes **[`baml_src/insomnia.baml.example`](baml_src/insomnia.baml.example)** with the same types and placeholder prompts.
 
-```bash
-uv run baml-cli generate
-```
+On a fresh clone (or first run):
+
+1. Copy the example to the real filename and edit prompts (task rules are summarized in [`resources/Insomnia_Rules.md`](resources/Insomnia_Rules.md)):
+
+   ```bash
+   cp baml_src/insomnia.baml.example baml_src/insomnia.baml
+   ```
+
+2. Generate the Python client (creates **`baml_client/`** locally; that directory is also gitignored because `inlinedbaml.py` embeds BAML sources):
+
+   ```bash
+   uv run baml-cli generate
+   ```
+
+Re-run `baml-cli generate` whenever you change any file under `baml_src/`.
 
 ### 4. Build labeled training JSONL (optional)
 
