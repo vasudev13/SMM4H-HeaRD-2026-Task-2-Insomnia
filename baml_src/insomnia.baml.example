@@ -1,42 +1,38 @@
 // Copy to `insomnia.baml` and fill in prompts (see resources/Insomnia_Rules.md). Not used at runtime until renamed.
 
-class InsomniaBinary {
-  insomnia "yes" | "no" @description("Whether the patient has insomnia per Rule A, Rule B, or Rule C in the task instructions")
+class SleepDifficultyEvidence {
+  citation string @description("Verbatim substring from the note supporting Definition 1 criteria")
 }
 
-class RuleEvidence {
-  label "yes" | "no"
-  evidence_quotes string[] @description("Verbatim substrings copied from the note that support the label; use empty list when label is no")
+class DaytimeImpairmentEvidence {
+  citation string @description("Verbatim substring from the note supporting Definition 2 criteria")
 }
 
-class InsomniaEvidenceExtraction {
-  definition_1 RuleEvidence @description("Definition 1: Difficulty Sleeping")
-  definition_2 RuleEvidence @description("Definition 2: Daytime Impairment")
-  rule_b RuleEvidence @description("Rule B: primary insomnia medications")
-  rule_c RuleEvidence @description("Rule C: secondary insomnia medications with Definition 1 or 2 symptoms")
+class MedicationEvidence {
+  med_type "primary" | "secondary" @description("Primary insomnia medication (Rule B) or secondary medication (Rule C)")
+  citation string @description("Verbatim substring from the note for this medication mention")
 }
 
-function ClassifyInsomnia(note_text: string) -> InsomniaBinary {
+class ClinicalNoteExtraction {
+  sleep_difficulty SleepDifficultyEvidence[] @description("All extracted Definition 1 evidence items")
+  daytime_impairment DaytimeImpairmentEvidence[] @description("All extracted Definition 2 evidence items")
+  medications MedicationEvidence[] @description("All extracted medication mentions used for Rule B/C")
+}
+
+function ExtractClinicalEvidence(note_text: string, few_shot_context: string) -> ClinicalNoteExtraction {
   client CustomGemini
   prompt #"
     {{ _.role("system") }}
-    Replace this block with your classification instructions and task definitions (see shared-task rules).
+    Replace this block with your extraction instructions for:
+    - Definition 1 evidence (sleep difficulty),
+    - Definition 2 evidence (daytime impairment),
+    - medication evidence with med_type primary/secondary.
+    Enforce verbatim citations copied directly from the note.
 
     {{ _.role("user") }}
-    Clinical note:
-    {{ note_text }}
+    Few-shot examples (may be empty):
+    {{ few_shot_context }}
 
-    {{ ctx.output_format }}
-  "#
-}
-
-function ExtractInsomniaEvidence(note_text: string) -> InsomniaEvidenceExtraction {
-  client CustomGemini
-  prompt #"
-    {{ _.role("system") }}
-    Replace this block with your extraction instructions for Definition 1/2 and Rules B/C, including verbatim-quote rules.
-
-    {{ _.role("user") }}
     Clinical note:
     {{ note_text }}
 

@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 
-from insomnia.spans import spans_from_quotes
+from insomnia.spans import rule_block_from_quotes, spans_from_quotes
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -44,6 +44,22 @@ class TestSpansFromQuotes(unittest.TestCase):
         spans, texts = spans_from_quotes(note, ["nope", "ort"])
         self.assertEqual(spans, ["2 5"])
         self.assertEqual(texts, ["ort"])
+
+
+class TestRuleBlockCompliance(unittest.TestCase):
+    def test_no_label_forces_empty_span_and_text(self) -> None:
+        block = rule_block_from_quotes("no", ["sleep difficulty"], "sleep difficulty")
+        self.assertEqual(block, {"label": "no", "span": [], "text": []})
+
+    def test_yes_without_match_downgrades_to_no(self) -> None:
+        block = rule_block_from_quotes("yes", ["missing phrase"], "clinical note text")
+        self.assertEqual(block, {"label": "no", "span": [], "text": []})
+
+    def test_yes_with_match_keeps_yes_and_span(self) -> None:
+        block = rule_block_from_quotes("yes", ["difficulty sleeping"], "pt has difficulty sleeping")
+        self.assertEqual(block["label"], "yes")
+        self.assertEqual(block["span"], ["7 26"])
+        self.assertEqual(block["text"], ["difficulty sleeping"])
 
 
 class TestGoldIntegrity(unittest.TestCase):

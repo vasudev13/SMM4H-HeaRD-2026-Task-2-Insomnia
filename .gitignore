@@ -48,9 +48,3 @@ outputs/
 # Generated JSON / JSON Lines (submissions, scratch). Use `git add -f path` to track.
 *.json
 *.jsonl
-
-# Private BAML prompts & generated client (inlinedbaml.py embeds full .baml sources)
-baml_src/insomnia.baml
-baml_src/insomnia_v1.baml.bak
-baml_client/
-inference.py

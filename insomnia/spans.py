@@ -12,6 +12,10 @@ it is skipped (no span), so downstream code may log or count misses.
 from __future__ import annotations
 
 
+def _yn(label: object) -> str:
+    return "yes" if str(label).strip().lower() == "yes" else "no"
+
+
 def spans_from_quotes(
     note_text: str, quotes: list[str] | tuple[str, ...]
 ) -> tuple[list[str], list[str]]:
@@ -39,6 +43,18 @@ def spans_from_quotes(
 def rule_block_from_quotes(
     label: str, quotes: list[str] | tuple[str, ...], note_text: str
 ) -> dict:
-    """Build one submission block: ``label``, ``span``, ``text``."""
+    """Build one submission block and enforce scorer-facing invariants.
+
+    Submission constraints:
+      - label == "no"  -> span/text must be empty lists
+      - label == "yes" -> span must be non-empty
+    """
+    normalized = _yn(label)
+    if normalized == "no":
+        return {"label": "no", "span": [], "text": []}
+
     span, text = spans_from_quotes(note_text, quotes)
-    return {"label": label, "span": span, "text": text}
+    if not span:
+        # If no quote could be grounded, downgrade to a valid negative block.
+        return {"label": "no", "span": [], "text": []}
+    return {"label": "yes", "span": span, "text": text}

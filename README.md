@@ -44,6 +44,8 @@ GOOGLE_API_KEY=your_key_here
 
 The inference CLI loads `.env` automatically before calling the model.
 
+`CustomGemini` in `baml_src/clients.baml` is tuned for **structured extraction**: `generationConfig` sets **temperature 0** so repeated runs on the same note stay consistent, and **max output tokens 8192** so long clinical notes with many criteria are less likely to hit **silent truncation** (which breaks BAML JSON parsing). **Gemini 2.5 Pro extended thinking** is requested via `thinkingConfig` nested under `generationConfig` in `clients.baml` (dynamic thinking budget); adjust or remove that block if you switch models. Placing `thinkingConfig` at the top level of the request is rejected by the Google AI API (400).
+
 ### 3. BAML prompts and generated client
 
 **`baml_src/insomnia.baml` is not committed** (private prompts; see `.gitignore`). The repo includes **[`baml_src/insomnia.baml.example`](baml_src/insomnia.baml.example)** with the same types and placeholder prompts.
@@ -134,7 +136,7 @@ uv run insomnia-inference --input-csv path/to/notes.csv --out-dir path/to/out --
 
 `--max-rows` limits how many notes are processed (handy for a quick smoke test).
 
-**Gemini rate limits:** Inference issues two model calls per note (`ClassifyInsomnia` and `ExtractInsomniaEvidence`). On the **Google AI free tier**, `gemini-2.5-flash` is often capped at about **5 requests per minute**, which leads to HTTP **429** if calls are fired back-to-back. By default, the CLI waits **12 seconds** between the *start* of consecutive requests (~5/min). Override with `GEMINI_MIN_INTERVAL_SEC` in `.env`, or `--min-interval-sec SEC` / `--rpm N` (mutually exclusive alternatives, where `--rpm` sets an interval of `60/N` seconds). Use `--min-interval-sec 0` when your API quota is high enough that throttling is unnecessary.
+**Gemini rate limits:** Inference issues one model call per note (`ExtractClinicalEvidence`). On the **Google AI free tier**, `gemini-2.5-flash` is often capped at about **5 requests per minute**, which leads to HTTP **429** if calls are fired back-to-back. By default, the CLI waits **12 seconds** between the *start* of consecutive requests (~5/min). Override with `GEMINI_MIN_INTERVAL_SEC` in `.env`, or `--min-interval-sec SEC` / `--rpm N` (mutually exclusive alternatives, where `--rpm` sets an interval of `60/N` seconds). Use `--min-interval-sec 0` when your API quota is high enough that throttling is unnecessary.
 
 ### 6. Tests
 
@@ -195,6 +197,19 @@ make test
 ```
 
 Run `make` (or `make help`) to see all available targets.
+
+### Test split (submission E2E)
+
+The test split mirrors the validation layout: note IDs and corpus CSV live under **`data/testing/`** — by default **`data/testing/test_note_ids.txt`** (one integer `ROW_ID` per line) and the MIMIC-built corpus **`data/testing/testing_corpus.csv`** (same role as `data/validation/validation_corpus.csv`). Inference still writes **`outputs/inference/subtask_1.json`** and **`subtask_2.json`** unless you override **`INFERENCE_DIR`**.
+
+```bash
+make test-corpus MIMIC_ROOT=/path/to/mimic-iii/1.4
+make inference-test
+make sanitize-subtask2   # optional
+make submission
+```
+
+Override paths with Makefile variables, e.g. `TEST_NOTE_IDS=...`, `TEST_CORPUS=...`, `INFERENCE_DIR=...`. Use `MAX_ROWS=N` on `inference-test` for a short smoke run.
 
 ## Corpus
 
