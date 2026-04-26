@@ -7,9 +7,15 @@ TEST_CORPUS ?= data/testing/testing_corpus.csv
 INFERENCE_DIR ?= outputs/inference
 # Set MAX_ROWS=N to process only the first N notes (smoke test), e.g. make inference-test MAX_ROWS=5
 MAX_ROWS ?=
+# Nearest-neighbor few-shot count for clean inference mode (0 = zero-shot)
+NEIGHBORS ?= 0
+GEPA_OUT_DIR ?= outputs/gepa/optimized
+GEPA_BASELINE_OUT_DIR ?= outputs/gepa/baseline
+GEPA_MAX_METRIC_CALLS ?= 150
+GEPA_TRAIN_LIMIT ?= 30
 
 .PHONY: help sync baml-init baml-generate build-labeled inference inference-test \
-	test-corpus example-index sanitize-subtask2 submission test clean
+	inference-clean gepa test-corpus example-index sanitize-subtask2 submission test clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -45,6 +51,22 @@ inference-test: ## Run inference on TEST_CORPUS → INFERENCE_DIR (v2, few-shot,
 	uv run insomnia-inference --input-csv "$(TEST_CORPUS)" --out-dir "$(INFERENCE_DIR)" \
 		--use-few-shot --min-interval-sec 0 \
 		$(if $(strip $(MAX_ROWS)),--max-rows $(MAX_ROWS),)
+
+inference-clean: ## Run inference-test with configurable NEIGHBORS (default 0 = zero-shot)
+	@test -f "$(TEST_CORPUS)" || (echo "Missing $(TEST_CORPUS); run 'make test-corpus MIMIC_ROOT=...' first." && exit 1)
+	uv run insomnia-inference --input-csv "$(TEST_CORPUS)" --out-dir "$(INFERENCE_DIR)" \
+		$(if $(filter 0,$(NEIGHBORS)),--no-few-shot,--use-few-shot --few-shot-k $(NEIGHBORS)) \
+		--min-interval-sec 0 \
+		$(if $(strip $(MAX_ROWS)),--max-rows $(MAX_ROWS),)
+
+gepa: ## Run GEPA pipeline (baseline + optimize + compare), configurable via NEIGHBORS/MAX_ROWS
+	uv run python scripts/run_gepa.py \
+		--baseline-neighbors "$(NEIGHBORS)" \
+		$(if $(strip $(MAX_ROWS)),--baseline-max-rows $(MAX_ROWS),) \
+		--max-metric-calls "$(GEPA_MAX_METRIC_CALLS)" \
+		--train-limit "$(GEPA_TRAIN_LIMIT)" \
+		--baseline-out-dir "$(GEPA_BASELINE_OUT_DIR)" \
+		--gepa-out-dir "$(GEPA_OUT_DIR)"
 
 example-index: ## Build FAISS few-shot index (data/training → data/)
 	uv run python scripts/build_example_index.py

@@ -9,7 +9,9 @@ description = "SMM4H-HeaRD @ ACL-2026 Shared Task 2: Detection of Insomnia in Cl
 requires-python = ">=3.10"
 dependencies = [
     "baml-py>=0.220.0",
+    "dspy>=3.2.0",
     "faiss-cpu>=1.7.4",
+    "gepa>=0.0.27",
     "numpy>=1.24",
     "pandas",
     "pydantic>=2",

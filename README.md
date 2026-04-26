@@ -1,253 +1,234 @@
-# SMM4H-HeaRD @ ACL-2026 Shared Task 2: Detection of Insomnia in Clinical Notes
+# SMM4H-HeaRD @ ACL 2026 -- Shared Task 2: Detection of Insomnia in Clinical Notes
 
-## Setup
+A two-pass pipeline for detecting insomnia in MIMIC-III clinical notes. The system uses **Google Gemini** (via [BAML](https://docs.boundaryml.com/)) for structured evidence extraction and deterministic rules for label derivation, with optional **GEPA** (Genetic Prompt Algorithm) prompt optimization.
 
-This project uses [uv](https://docs.astral.sh/uv/) for dependency management. Install uv, then create a virtual environment and install dependencies:
+## Architecture
+
+```
+Clinical Note
+     │
+     ▼
+┌─────────────────────────────┐
+│  Pass 1: LLM Extraction     │  Gemini 2.5 Flash / Pro
+│  (baml_src/insomnia.baml)    │  → structured JSON evidence
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│  Pass 2: Rule Engine         │  deterministic label derivation
+│  (insomnia/inference.py)     │  → Definition 1, Definition 2,
+│                              │    Rule A, Rule B, Rule C
+└──────────────┬──────────────┘
+               │
+               ▼
+  subtask_1.json + subtask_2.json
+```
+
+**Pass 1** extracts sleep difficulties, daytime impairments, and medication mentions as structured evidence with verbatim citations. **Pass 2** applies the task's clinical rules deterministically to produce labels and character-level spans.
+
+## Quick Start
 
 ```bash
-# Install uv (macOS/Linux)
+# 1. Install uv (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Create virtual environment and install dependencies
-uv venv
-source .venv/bin/activate
+# 2. Clone and install
+git clone git@github.com:vasudev13/SMM4H-HeaRD-2026-Task-2-Insomnia.git
+cd SMM4H-HeaRD-2026-Task-2-Insomnia
 uv sync
+
+# 3. Set up API key
+cp .env.example .env
+# Edit .env and add your GOOGLE_API_KEY
+
+# 4. Set up BAML prompts and generate client
+cp baml_src/insomnia.baml.example baml_src/insomnia.baml
+# Edit baml_src/insomnia.baml with your prompt instructions
+uv run baml-cli generate
+
+# 5. Build the corpus from MIMIC-III
+make test-corpus MIMIC_ROOT=/path/to/mimic-iii/1.4
+
+# 6. Run inference
+make inference-test
 ```
 
-Alternatively, run scripts without activating the environment:
+## Project Structure
+
+```
+├── baml_src/                    # BAML prompt definitions
+│   ├── insomnia.baml            # Main extraction prompt (two-pass v2)
+│   ├── insomnia.baml.example    # Template with placeholder prompts
+│   ├── clients.baml             # LLM client configuration (Gemini)
+│   └── generators.baml          # BAML code-gen settings
+├── insomnia/                    # Core Python package
+│   ├── inference.py             # Two-pass inference pipeline + derive_labels()
+│   ├── evaluate.py              # Local evaluator (F1, ROUGE-L)
+│   ├── evaluate_cli.py          # CLI wrapper for evaluation
+│   ├── spans.py                 # Character-span utilities
+│   ├── gepa_optimize.py         # GEPA prompt optimization module
+│   ├── retrieve_few_shots.py    # FAISS-based few-shot retrieval
+│   └── format_few_shots.py      # Few-shot example formatting
+├── scripts/                     # Standalone utility scripts
+│   ├── run_inference.py         # Thin wrapper → insomnia-inference
+│   ├── run_gepa.py              # GEPA optimization runner
+│   ├── build_labeled_datasets.py # Build labeled train/val artifacts
+│   ├── build_example_index.py   # Build FAISS few-shot index
+│   ├── evaluate_predictions.py  # Thin wrapper → insomnia-evaluate
+│   └── sanitize_subtask2_predictions.py  # Fix span formatting
+├── tests/                       # Unit tests
+├── resources/                   # Reference documents & annotation guidelines
+├── text_mimic_notes.py          # MIMIC-III corpus builder
+├── Makefile                     # Task automation
+├── pyproject.toml               # Project metadata & dependencies
+└── .env.example                 # API key template
+```
+
+## Requirements
+
+- **Python 3.10+**
+- **uv** for dependency management
+- **MIMIC-III v1.4** access ([PhysioNet](https://physionet.org/content/mimiciii/1.4/))
+- **Google AI API key** (Gemini 2.5 Flash or Pro)
+
+## Configuration
+
+### API Key
+
+Create a `.env` file from the template:
 
 ```bash
-uv run python text_mimic_notes.py ...
+cp .env.example .env
 ```
 
-The project targets **Python 3.10+** (see `pyproject.toml`).
+Set `GOOGLE_API_KEY=your_key_here`. The inference CLI loads this automatically.
 
-## Running this repository
+### BAML Prompts
 
-### 1. Install dependencies
-
-From the repository root:
+`baml_src/insomnia.baml` contains the extraction prompt. On a fresh clone, start from the example:
 
 ```bash
-uv sync
+cp baml_src/insomnia.baml.example baml_src/insomnia.baml
 ```
 
-This installs the package (including the `insomnia` library), BAML, pandas, and other dependencies.
-
-### 2. API key (LLM inference)
-
-Inference uses **Google Gemini** via BAML (`CustomGemini` in `baml_src/clients.baml`). Create a `.env` file in the repo root (you can start from `.env.example`) and set:
+See [`resources/Insomnia_Rules.md`](resources/Insomnia_Rules.md) for the clinical definitions (Definition 1, Definition 2, Rules A/B/C). After editing, regenerate the Python client:
 
 ```bash
-GOOGLE_API_KEY=your_key_here
+uv run baml-cli generate
 ```
 
-The inference CLI loads `.env` automatically before calling the model.
+### Gemini Settings
 
-`CustomGemini` in `baml_src/clients.baml` is tuned for **structured extraction**: `generationConfig` sets **temperature 0** so repeated runs on the same note stay consistent, and **max output tokens 8192** so long clinical notes with many criteria are less likely to hit **silent truncation** (which breaks BAML JSON parsing). **Gemini 2.5 Pro extended thinking** is requested via `thinkingConfig` nested under `generationConfig` in `clients.baml` (dynamic thinking budget); adjust or remove that block if you switch models. Placing `thinkingConfig` at the top level of the request is rejected by the Google AI API (400).
+`baml_src/clients.baml` configures `CustomGemini` with **temperature 0** for reproducibility and **8192 max output tokens** to avoid silent truncation on long notes. Extended thinking is enabled via `thinkingConfig` in `generationConfig`.
 
-### 3. BAML prompts and generated client
+## Usage
 
-**`baml_src/insomnia.baml` is not committed** (private prompts; see `.gitignore`). The repo includes **[`baml_src/insomnia.baml.example`](baml_src/insomnia.baml.example)** with the same types and placeholder prompts.
+### Building the Corpus
 
-On a fresh clone (or first run):
-
-1. Copy the example to the real filename and edit prompts (task rules are summarized in [`resources/Insomnia_Rules.md`](resources/Insomnia_Rules.md)):
-
-   ```bash
-   cp baml_src/insomnia.baml.example baml_src/insomnia.baml
-   ```
-
-2. Generate the Python client (creates **`baml_client/`** locally; that directory is also gitignored because `inlinedbaml.py` embeds BAML sources):
-
-   ```bash
-   uv run baml-cli generate
-   ```
-
-Re-run `baml-cli generate` whenever you change any file under `baml_src/`.
-
-### 4. Build labeled train/validation artifacts (optional)
-
-Builds labeled artifacts for `training` and `validation` (default) by joining each split corpus CSV with its `subtask_1.json` and `subtask_2.json`.
-
-Default run:
-
-```bash
-uv run python scripts/build_labeled_datasets.py
-```
-
-This writes split-scoped outputs under `outputs/labeled/`:
-
-- `outputs/labeled/training/subtask1_labeled.jsonl`
-- `outputs/labeled/training/subtask2_labeled.jsonl`
-- `outputs/labeled/training/subtask2_labeled_text_only.jsonl`
-- `outputs/labeled/training/training_labeled.csv`
-- `outputs/labeled/validation/subtask1_labeled.jsonl`
-- `outputs/labeled/validation/subtask2_labeled.jsonl`
-- `outputs/labeled/validation/subtask2_labeled_text_only.jsonl`
-- `outputs/labeled/validation/validation_labeled.csv`
-
-CSV schema (one row per note):
-
-- `note_id`
-- `text`
-- `subtask1_label` (`yes`/`no`)
-- `def1_spans`
-- `def2_spans`
-- `ruleb_spans`
-- `rulec_spans`
-
-Each `*_spans` column is stored as a JSON array string (e.g. `["881 899"]`).
-
-Useful flags:
-
-```bash
-# Build one split only
-uv run python scripts/build_labeled_datasets.py --split training
-uv run python scripts/build_labeled_datasets.py --split validation
-
-# Override paths for a single split
-uv run python scripts/build_labeled_datasets.py \
-  --split training \
-  --corpus path/to/corpus.csv \
-  --subtask1 path/to/subtask_1.json \
-  --subtask2 path/to/subtask_2.json
-```
-
-### 5. Run inference (validation → submission-shaped JSON)
-
-Default input is `data/validation/validation_corpus.csv`; default output directory is `outputs/inference/` (`subtask_1.json`, `subtask_2.json`):
-
-```bash
-uv run insomnia-inference
-```
-
-Equivalent:
-
-```bash
-uv run python scripts/run_inference.py
-```
-
-Useful flags:
-
-```bash
-uv run insomnia-inference --input-csv path/to/notes.csv --out-dir path/to/out --max-rows 5
-```
-
-`--max-rows` limits how many notes are processed (handy for a quick smoke test).
-
-**Gemini rate limits:** Inference issues one model call per note (`ExtractClinicalEvidence`). On the **Google AI free tier**, `gemini-2.5-flash` is often capped at about **5 requests per minute**, which leads to HTTP **429** if calls are fired back-to-back. By default, the CLI waits **12 seconds** between the *start* of consecutive requests (~5/min). Override with `GEMINI_MIN_INTERVAL_SEC` in `.env`, or `--min-interval-sec SEC` / `--rpm N` (mutually exclusive alternatives, where `--rpm` sets an interval of `60/N` seconds). Use `--min-interval-sec 0` when your API quota is high enough that throttling is unnecessary.
-
-### 6. Tests
-
-```bash
-uv run python -m unittest tests.test_spans tests.test_evaluate -v
-```
-
-### 7. Evaluate predictions (Task 2 metrics)
-
-This repository now includes a local evaluator for:
-
-- Subtask 1: F1 score (`yes` as positive class)
-- Subtask 2A: micro-average F1 over rule labels
-- Subtask 2B: macro-average ROUGE-L Precision/Recall/F1 over evidence text
-
-Run with defaults (gold from `data/training/`, predictions from `outputs/inference/`):
-
-```bash
-uv run insomnia-evaluate --split-name train
-```
-
-Equivalent:
-
-```bash
-uv run python scripts/evaluate_predictions.py --split-name train
-```
-
-Explicit paths example:
-
-```bash
-uv run insomnia-evaluate \
-  --gold-subtask1 data/training/subtask_1.json \
-  --gold-subtask2 data/training/subtask_2.json \
-  --pred-subtask1 outputs/inference/subtask_1.json \
-  --pred-subtask2 outputs/inference/subtask_2.json \
-  --split-name validation \
-  --json-out outputs/inference/metrics.json
-```
-
-With `--json-out`, metrics are written under `--experiment-name` (default `v0 - gemini-2.5-flash baseline`), with `split_name` included in that nested object. Use `--experiment-name ''` for the previous flat shape.
-
-Notes:
-
-- Official Task 2 scorer code is not currently bundled in this repository.
-- The local evaluator is intended for reproducible offline model iteration and should be treated as an approximation until organizers release an official scorer endpoint/script.
-- Subtask 2B local scoring averages ROUGE-L over `Definition 1`, `Definition 2`, `Rule B`, and `Rule C` entries where the gold label is `yes`.
-
-## Makefile shortcuts
-
-For convenience, you can use the repository `Makefile`:
-
-```bash
-make sync
-make baml-init
-make baml-generate
-make inference
-make test
-```
-
-Run `make` (or `make help`) to see all available targets.
-
-### Test split (submission E2E)
-
-The test split mirrors the validation layout: note IDs and corpus CSV live under **`data/testing/`** — by default **`data/testing/test_note_ids.txt`** (one integer `ROW_ID` per line) and the MIMIC-built corpus **`data/testing/testing_corpus.csv`** (same role as `data/validation/validation_corpus.csv`). Inference still writes **`outputs/inference/subtask_1.json`** and **`subtask_2.json`** unless you override **`INFERENCE_DIR`**.
+The shared task requires MIMIC-III access. After downloading, build the corpus:
 
 ```bash
 make test-corpus MIMIC_ROOT=/path/to/mimic-iii/1.4
+```
+
+This runs `text_mimic_notes.py` to join note IDs with MIMIC-III note text, demographics, and prescriptions.
+
+### Running Inference
+
+```bash
+# Full test set (with few-shot examples, no API throttle)
 make inference-test
-make sanitize-subtask2   # optional
-make submission
+
+# Zero-shot mode
+make inference-clean NEIGHBORS=0
+
+# Few-shot mode with k neighbors
+make inference-clean NEIGHBORS=3
+
+# Smoke test (first 5 notes)
+make inference-test MAX_ROWS=5
 ```
 
-Override paths with Makefile variables, e.g. `TEST_NOTE_IDS=...`, `TEST_CORPUS=...`, `INFERENCE_DIR=...`. Use `MAX_ROWS=N` on `inference-test` for a short smoke run.
+Output is written to `outputs/inference/subtask_1.json` and `subtask_2.json`.
 
-## Corpus
+**Rate limiting:** On the Google AI free tier, Gemini may cap at ~5 RPM. The default 12-second interval handles this. Override with `--min-interval-sec 0` when your quota allows it (all `make` targets above disable throttling).
 
-This shared task utilizes a corpus of clinical notes derived from the MIMIC-III Database. The clinical notes have been augmented with additional structured patient information, specifically sex, age, and the medications prescribed during their hospital stay.
+### GEPA Prompt Optimization
 
-Participants are required to complete necessary training and sign a data usage agreement to access the [MIMIC-III Clinical Database (v1.4)](https://physionet.org/content/mimiciii/1.4/). After gaining access and downloading the files, participants must run the [`text_mimic_notes.py`](text_mimic_notes.py) script to retrieve clinical notes and associated patient information using the provided note IDs. This process builds the corpus utilized in this shared task, as detailed in the instructions provided below.
-
-### MIMIC-III Notes Processing
-
-The `text_mimic_notes.py` Python script is designed to retrieve clinical notes and patient information from the MIMIC-III clinical database. The script takes a text file containing note IDs, and merges it with the content of the notes from MIMIC-III, including additional demographic and prescription information.
-
-#### Requirements
-
-- Python 3.10 or higher (project default)
-- pandas library
-- datetime module
-
-#### Usage
-
-The script requires three command-line arguments:
-- `--note_ids_path`: The file path to the text file containing the note IDs.
-- `--mimic_path`: The directory path containing the MIMIC-III v1.4 CSV files (`NOTEEVENTS.csv.gz`, `PRESCRIPTIONS.csv.gz` and `PATIENTS.csv.gz`).
-- `--output_path`: The file path where the processed corpus CSV will be saved. This output CSV file will have two columns: the note IDs and the textual data retrieved from MIMIC-III.
-
-#### Command Syntax
-
-The script is executed from the command line with the following syntax:
+[GEPA](https://github.com/GeneticsOfPrompting/gepa) evolves the extraction prompt using genetic algorithms while keeping the deterministic rule engine fixed:
 
 ```bash
-python text_mimic_notes.py --note_ids_path [path_to_note_ids_txt] --mimic_path [path_to_mimic_csv_directory] --output_path [path_to_output_csv]
+make gepa
 ```
 
-#### Example Command
+Configure with `GEPA_MAX_METRIC_CALLS`, `GEPA_TRAIN_LIMIT`, and `NEIGHBORS`.
 
-Here is an example command that illustrates how to run the script using specific paths for each required input:
+### Evaluation
+
+Local evaluation against gold labels (approximates the official scorer):
 
 ```bash
-python text_mimic_notes.py --note_ids_path ./training/sample_note_ids.txt  --mimic_path ./mimic-iii/1.4 --output_path ./training/sample_corpus.csv
+# Evaluate against training gold
+uv run insomnia-evaluate --split-name train
+
+# Evaluate against validation gold
+uv run insomnia-evaluate --split-name validation
+
+# Custom paths
+uv run insomnia-evaluate \
+  --gold-subtask1 data/validation/subtask_1.json \
+  --gold-subtask2 data/validation/subtask_2.json \
+  --pred-subtask1 outputs/inference/subtask_1.json \
+  --pred-subtask2 outputs/inference/subtask_2.json
 ```
 
-This command will process the note IDs from `./training/sample_note_ids.txt`, merge them with the data found in `./mimic-iii/1.4`, and output the resulting corpus to `./training/sample_corpus.csv`.
+Metrics: Subtask 1 F1, Subtask 2A micro-F1 (rule labels), Subtask 2B macro ROUGE-L (evidence spans).
+
+### Creating Submissions
+
+```bash
+make sanitize-subtask2   # optional: fix span formatting
+make submission          # creates date-stamped ZIPs
+```
+
+### Tests
+
+```bash
+make test
+```
+
+## Makefile Reference
+
+| Target | Description |
+|---|---|
+| `sync` | Install/sync dependencies |
+| `baml-init` | Create `insomnia.baml` from example |
+| `baml-generate` | Regenerate BAML Python client |
+| `build-labeled` | Build labeled training/validation JSONL |
+| `inference` | Run inference on validation corpus |
+| `inference-test` | Run inference on test corpus (few-shot) |
+| `inference-clean` | Run inference with configurable `NEIGHBORS` |
+| `gepa` | Run GEPA prompt optimization pipeline |
+| `test-corpus` | Build test corpus from MIMIC-III |
+| `example-index` | Build FAISS few-shot index |
+| `sanitize-subtask2` | Fix span formatting in subtask_2.json |
+| `submission` | Create date-stamped submission ZIPs |
+| `test` | Run unit tests |
+| `clean` | Remove inference outputs |
+
+## Data Layout
+
+```
+data/
+├── training/           # Gold labels + note IDs (provided by organizers)
+├── validation/         # Gold labels + note IDs (provided by organizers)
+├── testing/            # Test note IDs + built corpus
+├── example_metadata.json  # Few-shot example metadata
+└── faiss_index.bin     # Pre-built FAISS index for retrieval
+```
+
+All files under `data/` are gitignored due to MIMIC-III data use agreements.
+
+## License
+
+This project is part of the [SMM4H-HeaRD 2026 Shared Task](https://healthlanguageprocessing.org/smm4h-2026/). The clinical notes are derived from MIMIC-III and subject to its [data use agreement](https://physionet.org/content/mimiciii/1.4/).

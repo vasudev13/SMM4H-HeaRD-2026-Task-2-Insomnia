@@ -30,8 +30,9 @@ htmlcov/
 logs/
 *.tmp
 .tmp/
+*.bak
 
-# Secrets (keep `.env.example` tracked)
+# Secrets
 .env
 .env.local
 
@@ -39,12 +40,14 @@ logs/
 .DS_Store
 Thumbs.db
 
+# IDE
+.cursor/
+
+# BAML generated client (rebuild with `uv run baml-cli generate`)
+baml_client/
+
 # Task data & large corpora (MIMIC, labels, CSVs)
 data/
 
-# Pipeline outputs (labeled JSONL, inference JSON)
+# Pipeline outputs (inference JSON, labeled JSONL, GEPA artifacts)
 outputs/
-
-# Generated JSON / JSON Lines (submissions, scratch). Use `git add -f path` to track.
-*.json
-*.jsonl
